@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+         {
+            "label": "Upload current file to /sd",
+            "type": "shell",
+            "command": "mpremote connect COM4 fs cp \"${file}\" :/sd/${fileBasename}; mpremote connect COM4 reset"
+        },
+        {
+            "label": "Soft reset",
+            "type": "shell",
+            "command": "mpremote connect COM4 reset"
+        },
+        {
+            "label": "Download current file from /sd",
+            "type": "shell",
+            "command": "mpremote connect COM4 fs cp :/sd/${fileBasename} \"${file}\""
+        },
+        {
+            "label": "Open REPL",
+            "type": "shell",
+            "command": "mpremote connect COM4"
+        }
+    ]
+}
