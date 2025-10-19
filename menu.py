@@ -34,6 +34,7 @@ def show_main_menu(battery_status):
         ("Open REPL", "repl"),
         ("Memory Stats", "memory"),
         ("Battery Status", "battery"),
+        ("Servo Control", "servo"),
         ("GPIO Control", "gpio"),
         ("Run App", "app"),
         ("Edit File", "edit"),
@@ -367,6 +368,18 @@ def show_power_menu():
         elif key in ('q', 'Q'):  # Quick cancel
             return "cancel"
 
+def run_servo_control():
+    """Open the multi-servo control dashboard."""
+    try:
+        from servo_control import show_servo_control
+        show_servo_control()
+    except Exception as e:
+        clear()
+        center_text("Servo Control Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
 # ============ Main Loop ============
 
 def main():
@@ -395,6 +408,9 @@ def main():
             
         elif choice == "battery":
             show_battery_details()
+            
+        elif choice == "servo":
+            run_servo_control()
             
         elif choice == "gpio":
             run_gpio_control()

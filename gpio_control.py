@@ -245,7 +245,58 @@ def show_gpio_control():
             if not isinstance(pin, str):
                 if pin.mode == "OUT":
                     pin.toggle_output()
-                # For IN/PWM, Enter does nothing
+                elif pin.mode == "PWM":
+                    # Enter Servo Control mode
+                    servo_angle = 90  # Start at midpoint
+                    min_us = 500
+                    max_us = 2500
+                    freq = 50
+                    running = True
+                    # Helper: set PWM for given angle
+                    def set_servo_pwm(angle):
+                        angle = max(0, min(180, angle))
+                        pulse_us = int(min_us + (max_us - min_us) * angle / 180)
+                        duty_pct = pulse_us * freq / 10000  # (pulse_us / 20_000us) * 100
+                        pin.pwm_duty_pct = duty_pct
+                        if pin._pwm:
+                            try:
+                                pin._pwm.freq(freq)
+                            except Exception:
+                                pass
+                            try:
+                                pin._pwm.duty_u16(int(duty_pct * 65535 / 100))
+                            except Exception:
+                                try:
+                                    period_ns = 20_000_000
+                                    duty_ns = int(period_ns * duty_pct / 100)
+                                    pin._pwm.duty_ns(duty_ns)
+                                except Exception:
+                                    pass
+                        return pulse_us, duty_pct
+
+                    # Set initial position
+                    pulse_us, duty_pct = set_servo_pwm(servo_angle)
+                    while running:
+                        clear()
+                        try:
+                            battery_status = get_battery_status()
+                        except Exception:
+                            battery_status = None
+                        draw_title_bar(f"Servo Control: {pin.label}", battery_status)
+                        center_text(f"Angle: {servo_angle}°", 80, COLOR_CYAN)
+                        center_text(f"Pulse: {pulse_us}us", 120, COLOR_YELLOW)
+                        center_text(f"Duty: {duty_pct:.2f}% @ 50Hz", 160, COLOR_WHITE)
+                        draw_text("UP/DOWN: Move servo", 8, 290, COLOR_YELLOW)
+                        draw_text("ENTER: Exit", 8, 306, COLOR_YELLOW)
+                        key2 = wait_key_raw()
+                        if key2 == 'A':
+                            servo_angle = min(180, servo_angle + 5)
+                        elif key2 == 'B':
+                            servo_angle = max(0, servo_angle - 5)
+                        elif key2 in ('\r', '\n'):
+                            running = False
+                        pulse_us, duty_pct = set_servo_pwm(servo_angle)
+                        time.sleep(0.01)
         elif key in ('+', '='):
             pin = rows[sel_idx]
             if not isinstance(pin, str) and pin.mode == "PWM":
