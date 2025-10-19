@@ -28,6 +28,7 @@ A complete dashboard interface for the PicoCalc with battery monitoring, file ma
 
 #### 🕹️ Games & Utilities
 - **Breakout, 2048, Snake** - Classic games with smooth animation and partial redraws
+- **Tower Defense** - Strategic tower placement game with 3 tower types, wave-based enemies, and resource management
 - **Graphing Calculator** - Animated graph drawing, parametric mode (x(t), y(t)), supports complex equations
 - **Stopwatch** - Accurate timer with start/stop/reset
 - **Minesweeper** - Efficient grid redraw, safe first click, flagging, win/lose detection
