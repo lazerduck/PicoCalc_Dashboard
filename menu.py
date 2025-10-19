@@ -2,12 +2,24 @@
 import sys
 import time
 import gc
-import picocalc
+try:
+    import picocalc  # type: ignore  # noqa
+except Exception:
+    # Provide minimal stubs for development environments without hardware
+    class _DummyTerm:
+        def wr(self, _):
+            pass
+    class _DummyPC:
+        terminal = _DummyTerm()
+    picocalc = _DummyPC()
 from ui import *
 from battery import get_status as get_battery_status
 
-# Hide terminal cursor for clean UI
-picocalc.terminal.wr("\x1b[?25l")
+# Hide terminal cursor for clean UI (no-op on stub)
+try:
+    picocalc.terminal.wr("\x1b[?25l")
+except Exception:
+    pass
 
 # ============ Menu Pages ============
 
@@ -22,6 +34,7 @@ def show_main_menu(battery_status):
         ("Open REPL", "repl"),
         ("Memory Stats", "memory"),
         ("Battery Status", "battery"),
+        ("GPIO Control", "gpio"),
         ("Run App", "app"),
         ("Edit File", "edit"),
         ("Play Music", "music"),
@@ -267,8 +280,12 @@ def run_file_editor():
         center_text(f"Opening {filename}...", 140, COLOR_YELLOW)
         time.sleep(0.3)
         
-        # Use built-in editor
-        edit(path)
+        # Use built-in editor if available on this firmware
+        import builtins as _bi
+        ed = getattr(_bi, "edit", None)
+        if not ed:
+            raise RuntimeError("Built-in edit() is not available on this firmware")
+        ed(path)
         
         # Show completion message
         clear()
@@ -291,6 +308,18 @@ def run_music_player():
     except Exception as e:
         clear()
         center_text("Music Player Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
+def run_gpio_control():
+    """Open the graphical GPIO configuration UI."""
+    try:
+        from gpio_control import show_gpio_control
+        show_gpio_control()
+    except Exception as e:
+        clear()
+        center_text("GPIO Control Error", 100, COLOR_RED)
         center_text(str(e), 130, COLOR_WHITE)
         center_text("Press any key...", 290, COLOR_YELLOW)
         wait_key_raw()
@@ -366,6 +395,9 @@ def main():
             
         elif choice == "battery":
             show_battery_details()
+            
+        elif choice == "gpio":
+            run_gpio_control()
             
         elif choice == "app":
             run_app_selector()

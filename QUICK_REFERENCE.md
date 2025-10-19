@@ -145,10 +145,18 @@ draw_progress_bar(x=10, y=100, width=200, height=20,
 1. **Open REPL** → Exit to MicroPython
 2. **Memory Stats** → View RAM usage
 3. **Battery Status** → Detailed battery info
+4. **GPIO Control** → Configure GP2, GP3, GP4, GP5, GP21, GP28
 4. **Run App** → Browse/run .py files
 5. **Edit File** → Open text editor
 6. **Play Music** → Browse/play .mp3 files
 7. **Power Off / Reset** → System controls
+
+### GPIO Control Keys
+- UP/DOWN: Select a GPIO row
+- LEFT/RIGHT: Cycle mode (IN → OUT → PWM)
+- ENTER: Toggle OUT (on/off)
+- + / -: Increase/decrease PWM duty
+- Q: Exit
 
 ## 🐛 Troubleshooting
 

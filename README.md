@@ -20,6 +20,7 @@ A complete dashboard interface for the PicoCalc with battery monitoring, file ma
 1. **Open REPL** - Exit to MicroPython REPL
 2. **Memory Stats** - View RAM usage with visual bar graph
 3. **Battery Status** - Detailed battery information
+4. **GPIO Control** - Configure side header pins (IN/OUT/PWM)
 4. **Run App** - Browse and execute Python apps from /sd
 5. **Edit File** - Open files in the built-in editor
 6. **Play Music** - Browse and play MP3 files from /sd
@@ -47,6 +48,7 @@ new/
 ├── ui.py            # UI components (battery icon, text, drawing)
 ├── battery.py       # Battery monitoring module
 ├── fileselect.py    # File browser/selector (now supports directory navigation)
+├── gpio_control.py  # Graphical GPIO configuration tool
 ├── loadapp.py       # App loader
 ├── play.py          # Music player
 ├── graph.py         # Graphing calculator (normal & parametric modes)
@@ -171,6 +173,11 @@ draw_progress_bar(10, 50, 200, 20, 75, COLOR_GREEN)
   - `RIGHT` (C): (reserved for future use)
 - **Enter** (`\r` or `\n`): Select/Confirm
 - **Q**: Quick quit/cancel
+
+### GPIO Control specifics
+- LEFT/RIGHT: Change mode (IN → OUT → PWM)
+- ENTER: Toggle OUT state
+- +/-: Adjust PWM duty in 5% steps
 
 ## Customization
 
