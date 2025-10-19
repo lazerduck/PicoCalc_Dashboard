@@ -11,11 +11,39 @@ SCREEN_HEIGHT = 320
 
 # Colors
 COLOR_BG = 0
-COLOR_TILE = 3
 COLOR_TEXT = 7
 COLOR_EMPTY = 1
 COLOR_WIN = 6
 COLOR_LOSE = 2
+
+# Tile colors based on value (4-bit color palette)
+def get_tile_color(value):
+    if value == 0:
+        return COLOR_BG  # Black for empty tiles
+    elif value == 2:
+        return 3  # Green
+    elif value == 4:
+        return 2  # Red
+    elif value == 8:
+        return 6  # Yellow
+    elif value == 16:
+        return 5  # Magenta
+    elif value == 32:
+        return 4  # Cyan
+    elif value == 64:
+        return 1  # Blue
+    elif value == 128:
+        return 3  # Green (cycle)
+    elif value == 256:
+        return 2  # Red
+    elif value == 512:
+        return 6  # Yellow
+    elif value == 1024:
+        return 5  # Magenta
+    elif value == 2048:
+        return 4  # Cyan
+    else:
+        return 7  # White for very high values
 
 # Game constants
 GRID_SIZE = 4
@@ -27,19 +55,38 @@ import random
 
 def draw_grid(grid, score, state):
     fb.fill(COLOR_BG)
-    # Draw tiles
     for y in range(GRID_SIZE):
         for x in range(GRID_SIZE):
             val = grid[y][x]
             tx = GRID_OFFSET_X + x * TILE_SIZE
             ty = GRID_OFFSET_Y + y * TILE_SIZE
-            color = COLOR_TILE if val else COLOR_EMPTY
+            color = get_tile_color(val)
             fb.fill_rect(tx, ty, TILE_SIZE-4, TILE_SIZE-4, color)
             if val:
                 fb.text(str(val), tx+TILE_SIZE//2-8, ty+TILE_SIZE//2-8, COLOR_TEXT)
-    # Draw score
     fb.text(f"Score: {score}", 10, 10, COLOR_TEXT)
-    # Draw state
+    if state == "win":
+        fb.text("YOU WIN!", 120, 10, COLOR_WIN)
+    elif state == "lose":
+        fb.text("GAME OVER", 120, 10, COLOR_LOSE)
+    fb.text("Q: Quit", 10, 300, COLOR_TEXT)
+    fb.text("Arrows: Move", 120, 300, COLOR_TEXT)
+
+def draw_grid_with_offsets(grid, score, state, offsets=None):
+    fb.fill(COLOR_BG)
+    for y in range(GRID_SIZE):
+        for x in range(GRID_SIZE):
+            val = grid[y][x]
+            dx, dy = 0, 0
+            if offsets and (y, x) in offsets:
+                dx, dy = offsets[(y, x)]
+            tx = GRID_OFFSET_X + x * TILE_SIZE + dx
+            ty = GRID_OFFSET_Y + y * TILE_SIZE + dy
+            color = get_tile_color(val)
+            fb.fill_rect(tx, ty, TILE_SIZE-4, TILE_SIZE-4, color)
+            if val:
+                fb.text(str(val), tx+TILE_SIZE//2-8, ty+TILE_SIZE//2-8, COLOR_TEXT)
+    fb.text(f"Score: {score}", 10, 10, COLOR_TEXT)
     if state == "win":
         fb.text("YOU WIN!", 120, 10, COLOR_WIN)
     elif state == "lose":
@@ -131,6 +178,7 @@ def main():
     add_tile(grid)
     add_tile(grid)
     temp = bytearray(1)
+    prev_grid = [[0]*GRID_SIZE for _ in range(GRID_SIZE)]
     while True:
         draw_grid(grid, score, state)
         if state != "playing":
@@ -138,21 +186,67 @@ def main():
             break
         # Input
         moved, s = False, 0  # Always initialize
+        direction = None
         if keyboard.readinto(temp):
             key = temp[0]
             if key in (ord('q'), ord('Q')):
                 break
             elif key == 65: # Up
-                moved, s = move_grid(grid, 'up')
+                direction = 'up'
             elif key == 66: # Down
-                moved, s = move_grid(grid, 'down')
+                direction = 'down'
             elif key == 67: # Right
-                moved, s = move_grid(grid, 'right')
+                direction = 'right'
             elif key == 68: # Left
-                moved, s = move_grid(grid, 'left')
-        if moved:
-            add_tile(grid)
-            score += s
+                direction = 'left'
+        if direction:
+            # Copy grid for animation
+            for y in range(GRID_SIZE):
+                for x in range(GRID_SIZE):
+                    prev_grid[y][x] = grid[y][x]
+            moved, s = move_grid(grid, direction)
+            if moved:
+                # Animate the slide
+                frames = 4  # Reduced from 5 to lower frame rate
+                for frame in range(1, frames+1):
+                    offsets = {}
+                    # Calculate offset based on direction only
+                    # Tiles slide from their "before" position in the direction of movement
+                    if direction == 'up':
+                        for y in range(GRID_SIZE):
+                            for x in range(GRID_SIZE):
+                                if grid[y][x] != 0:
+                                    # Find how far this tile should have slid from
+                                    # Only animate if grid changed
+                                    if prev_grid[y][x] != grid[y][x]:
+                                        # Tile came from below
+                                        dy = int((TILE_SIZE) * (frames-frame) / frames)
+                                        offsets[(y, x)] = (0, dy)
+                    elif direction == 'down':
+                        for y in range(GRID_SIZE):
+                            for x in range(GRID_SIZE):
+                                if grid[y][x] != 0:
+                                    if prev_grid[y][x] != grid[y][x]:
+                                        dy = int(-(TILE_SIZE) * (frames-frame) / frames)
+                                        offsets[(y, x)] = (0, dy)
+                    elif direction == 'left':
+                        for y in range(GRID_SIZE):
+                            for x in range(GRID_SIZE):
+                                if grid[y][x] != 0:
+                                    if prev_grid[y][x] != grid[y][x]:
+                                        dx = int((TILE_SIZE) * (frames-frame) / frames)
+                                        offsets[(y, x)] = (dx, 0)
+                    elif direction == 'right':
+                        for y in range(GRID_SIZE):
+                            for x in range(GRID_SIZE):
+                                if grid[y][x] != 0:
+                                    if prev_grid[y][x] != grid[y][x]:
+                                        dx = int(-(TILE_SIZE) * (frames-frame) / frames)
+                                        offsets[(y, x)] = (dx, 0)
+                    draw_grid_with_offsets(grid, score, state, offsets)
+                    time.sleep_ms(100)  # Increased from 20ms to reduce flicker
+                add_tile(grid)
+                score += s
         if check_win(grid):
             state = "win"
         elif check_lose(grid):

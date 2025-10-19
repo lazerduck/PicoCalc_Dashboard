@@ -15,7 +15,8 @@ A complete dashboard interface for the PicoCalc with battery monitoring, file ma
 - **USB power detection** (VSYS > 4.5V)
 - **Detailed battery page** with voltage, percentage, and status
 
-### 📱 Dashboard Menu
+
+### 📱 Dashboard Menu & Applets
 1. **Open REPL** - Exit to MicroPython REPL
 2. **Memory Stats** - View RAM usage with visual bar graph
 3. **Battery Status** - Detailed battery information
@@ -23,6 +24,12 @@ A complete dashboard interface for the PicoCalc with battery monitoring, file ma
 5. **Edit File** - Open files in the built-in editor
 6. **Play Music** - Browse and play MP3 files from /sd
 7. **Power Off / Reset** - System power controls
+
+#### 🕹️ Games & Utilities
+- **Breakout, 2048, Snake** - Classic games with smooth animation and partial redraws
+- **Graphing Calculator** - Animated graph drawing, parametric mode (x(t), y(t)), supports complex equations
+- **Stopwatch** - Accurate timer with start/stop/reset
+- **Minesweeper** - Efficient grid redraw, safe first click, flagging, win/lose detection
 
 ### 🎨 UI Components
 - **320x320 display** optimized layout
@@ -33,14 +40,18 @@ A complete dashboard interface for the PicoCalc with battery monitoring, file ma
 
 ## File Structure
 
+
 ```
 new/
 ├── menu.py          # Main dashboard and menu system
 ├── ui.py            # UI components (battery icon, text, drawing)
 ├── battery.py       # Battery monitoring module
-├── fileselect.py    # File browser/selector
+├── fileselect.py    # File browser/selector (now supports directory navigation)
 ├── loadapp.py       # App loader
 ├── play.py          # Music player
+├── graph.py         # Graphing calculator (normal & parametric modes)
+├── stopwatch.py     # Stopwatch applet
+├── minesweeper.py   # Minesweeper game
 └── README.md        # This file
 ```
 
@@ -116,11 +127,12 @@ v = get_voltage()
 print(f"Voltage: {v}V")
 ```
 
-#### File Selector
+
+#### File Selector (with directory navigation)
 ```python
 from fileselect import select_file
 
-# Select a Python file
+# Select a Python file (navigate with arrows, Enter to enter directory, Left to go up)
 path = select_file(path="/sd", exts=(".py",), title="Choose file")
 
 # Select any file
@@ -151,9 +163,12 @@ draw_progress_bar(10, 50, 200, 20, 75, COLOR_GREEN)
 
 ## Controls
 
+
 - **Arrow Keys**:
   - `UP` (A): Navigate up
   - `DOWN` (B): Navigate down
+  - `LEFT` (D): Go up to parent directory (in file selector)
+  - `RIGHT` (C): (reserved for future use)
 - **Enter** (`\r` or `\n`): Select/Confirm
 - **Q**: Quick quit/cancel
 
@@ -226,6 +241,41 @@ elif choice == "your_code":
 
 ## Development
 
+## PicoCalc Development Tricks & Best Practices
+
+### Efficient Display Updates
+- **Partial Redraws**: Only redraw changed regions (e.g., moving cursor, updating a cell) for smooth animation and speed.
+- **Batch Drawing**: For animated graphs and games, draw in batches (e.g., every 16 points) and call `fb.show()` to avoid flicker.
+
+### Non-blocking Keyboard Input
+- **Non-blocking Input**: Use `keyboard.readinto()` in a loop to check for keypresses without freezing the UI. This allows smooth animation and responsive controls.
+- **Arrow Key Handling**: Detect ANSI escape sequences (ESC [ A/B/C/D) for arrow keys, and handle multi-byte input for navigation.
+
+### Robust Error Handling
+- **App Loader**: Use `sys.print_exception` to log errors to `/sd/app_error.log` and display concise error messages on screen.
+- **Safe Eval Environment**: For graphing, explicitly provide math functions/constants to `eval` for MicroPython compatibility.
+
+### UI/UX Tricks
+- **Cursor Rendering**: Manually calculate cursor position (e.g., 6px per character) for accurate placement, especially when no text width API is available.
+- **Multi-line Input**: For parametric graphing, allocate extra space and use separate lines for x(t) and y(t) input.
+- **Scrolling & Navigation**: In file selector and menus, maintain scroll offset and only show visible items for large lists.
+
+### Game Optimization
+- **Efficient Grid Redraw**: In Minesweeper, only redraw cells that change (reveal/flag/cursor) for speed.
+- **Safe First Click**: Place mines after the first reveal to guarantee the first cell is safe.
+- **Manual Shuffle**: Use a custom shuffle (Fisher-Yates) for randomization, since MicroPython's `random` may lack `shuffle`.
+
+### General MicroPython Tips
+- **Import Compatibility**: Always check module availability (e.g., `random.shuffle` may not exist).
+- **Path Handling**: Use `/sd/new` for all custom modules and update `sys.path` as needed.
+- **Color Constants**: Centralize color definitions in `ui.py` for easy theme changes.
+
+### Debugging & Testing
+- **Log Errors**: Write exceptions to a log file for post-mortem debugging.
+- **Test on Hardware**: Some features (e.g., display, keyboard) may behave differently on hardware vs. emulator.
+
+---
+
 ### Adding New Features
 
 1. Add UI components to `ui.py`
@@ -251,3 +301,7 @@ This code is designed for the PicoCalc platform. Modify and use as needed for yo
 ## Credits
 
 Created for PicoCalc - Raspberry Pi Pico 2 based calculator platform.
+
+---
+### Special Thanks
+This project incorporates many lessons learned about MicroPython, hardware constraints, and UI design for embedded systems. See the "Development Tricks" section above for a summary of best practices and solutions to common PicoCalc challenges.

@@ -29,29 +29,31 @@ def run_app():
     
     # Run the app
     try:
+        import sys
         with open(path, 'r') as f:
             code = f.read()
-        
         # Execute in isolated namespace
         exec(code, {'__name__': '__main__'})
-        
     except Exception as e:
+        # Log exception to file using sys.print_exception
+        try:
+            with open('/sd/app_error.log', 'w') as logf:
+                sys.print_exception(e, logf)
+        except Exception:
+            pass
         # Show error
         clear()
         center_text("Error Running App", 100, COLOR_RED)
-        
-        # Display error message (may be long)
-        error_text = str(e)
+        # Show exception type and message
+        error_text = '{}: {}'.format(type(e).__name__, e)
         y = 130
-        # Split long errors into multiple lines
         max_chars = 38
         while error_text:
             line = error_text[:max_chars]
             error_text = error_text[max_chars:]
             center_text(line, y, COLOR_WHITE)
             y += 16
-            if y > 250:  # Don't overflow screen
+            if y > 250:
                 break
-        
         center_text("Press any key...", 290, COLOR_YELLOW)
         wait_key_raw()
