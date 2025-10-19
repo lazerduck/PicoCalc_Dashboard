@@ -145,17 +145,32 @@ draw_progress_bar(x=10, y=100, width=200, height=20,
 1. **Open REPL** → Exit to MicroPython
 2. **Memory Stats** → View RAM usage
 3. **Battery Status** → Detailed battery info
-4. **GPIO Control** → Configure GP2, GP3, GP4, GP5, GP21, GP28
-4. **Run App** → Browse/run .py files
-5. **Edit File** → Open text editor
-6. **Play Music** → Browse/play .mp3 files
-7. **Power Off / Reset** → System controls
+4. **Servo Control** → Control up to 6 servos simultaneously
+5. **GPIO Control** → Configure GP2, GP3, GP4, GP5, GP21, GP28
+6. **File Manager** → Browse, rename, delete files and create folders
+7. **Run App** → Browse/run .py files
+8. **Edit File** → Open text editor
+9. **Play Music** → Browse/play .mp3 files
+10. **Power Off / Reset** → System controls
 
 ### GPIO Control Keys
 - UP/DOWN: Select a GPIO row
 - LEFT/RIGHT: Cycle mode (IN → OUT → PWM)
 - ENTER: Toggle OUT (on/off)
 - + / -: Increase/decrease PWM duty
+- Q: Exit
+
+### Servo Control Keys
+- UP/DOWN: Select a servo
+- LEFT/RIGHT: Adjust angle (-5° / +5°)
+- Q: Exit
+
+### File Manager Keys
+- UP/DOWN: Navigate files/folders
+- ENTER: Show action menu (Rename, Delete)
+- RIGHT: Navigate into folder
+- LEFT: Go up to parent directory
+- N: Create new folder
 - Q: Exit
 
 ## 🐛 Troubleshooting

@@ -5,14 +5,39 @@ import sys
 fb = picocalc.display  # 320x320 framebuffer
 
 # ============ Color Definitions ============
-COLOR_BLACK = 0
-COLOR_BLUE = 1
-COLOR_RED = 2
-COLOR_GREEN = 3
-COLOR_CYAN = 4
-COLOR_MAGENTA = 5
-COLOR_YELLOW = 6
-COLOR_WHITE = 7
+# VT100 color indices (0-7) - USE THESE FOR TEXT RENDERING
+# The PicoCalc text renderer only supports these 8 palette indices
+COLOR_BLACK = 0         # 0x0000 - Black
+COLOR_BLUE = 1          # 0x0080 - Dark Blue
+COLOR_RED = 2           # 0x0004 - Dark Red
+COLOR_TEAL = 3          # 0x0084 - Dark Green/Teal (what VT100 calls "green")
+COLOR_BRIGHT_GREEN = 4  # 0x1000 - Bright Green (what VT100 calls "cyan")
+COLOR_BLUE_GREEN = 5    # 0x1080 - Blue-Green (what VT100 calls "magenta")
+COLOR_BROWN = 6         # 0x1004 - Dark Yellow/Brown (what VT100 calls "yellow")
+COLOR_WHITE = 7         # 0x18C6 - Light Gray/White
+
+# Aliases for VT100 indices (for text compatibility)
+COLOR_GREEN = COLOR_BRIGHT_GREEN  # Use index 4 for "green" text (displays bright green)
+COLOR_CYAN = COLOR_TEAL           # Use index 3 for "cyan" text (displays teal)
+COLOR_YELLOW = COLOR_BROWN        # Use index 6 for "yellow" text (displays brown)
+COLOR_MAGENTA = COLOR_BLUE_GREEN  # Use index 5 for "magenta" text (displays blue-green)
+
+# Extended RGB565 color palette (for fill_rect/primitives ONLY, not text!)
+# Format: 0bRRRRRGGGGGGBBBBB (5 red, 6 green, 5 blue bits)
+RGB_DARK_GRAY = 0x4208       # Dark gray for subtle borders
+RGB_LIGHT_GRAY = 0xC618      # Light gray for UI elements
+RGB_ORANGE = 0xFC00          # Bright orange for warnings
+RGB_LIME = 0x07E0            # Bright lime green
+RGB_PINK = 0xF81F            # Bright pink/magenta
+RGB_PURPLE = 0x8010          # Purple
+RGB_LIGHT_BLUE = 0x051F      # Light blue/cyan
+RGB_DARK_GREEN = 0x0320      # Dark green
+RGB_BRIGHT_RED = 0xF800      # Bright red
+RGB_BRIGHT_BLUE = 0x001F     # Bright blue
+RGB_BRIGHT_YELLOW = 0xFFE0   # Bright yellow
+RGB_TRUE_GREEN = 0x07E0      # True green (RGB 0,255,0)
+RGB_TRUE_CYAN = 0x07FF       # True cyan (RGB 0,255,255)
+RGB_TRUE_MAGENTA = 0xF81F    # True magenta (RGB 255,0,255)
 
 # ============ Text Rendering ============
 def draw_text(s, x, y, fg=COLOR_WHITE, bg=None):

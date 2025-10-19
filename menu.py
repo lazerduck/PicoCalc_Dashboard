@@ -36,6 +36,7 @@ def show_main_menu(battery_status):
         ("Battery Status", "battery"),
         ("Servo Control", "servo"),
         ("GPIO Control", "gpio"),
+        ("File Manager", "files"),
         ("Run App", "app"),
         ("Edit File", "edit"),
         ("Play Music", "music"),
@@ -325,6 +326,24 @@ def run_gpio_control():
         center_text("Press any key...", 290, COLOR_YELLOW)
         wait_key_raw()
 
+def run_file_manager():
+    """Open the file manager for browsing and managing files."""
+    try:
+        from fileselect import select_file
+        select_file(
+            path="/sd",
+            exts=None,
+            title="File Manager",
+            return_full_path=True,
+            mode="manage"
+        )
+    except Exception as e:
+        clear()
+        center_text("File Manager Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
 def show_power_menu():
     """Show power options (reset/shutdown)."""
     clear()
@@ -414,6 +433,12 @@ def main():
             
         elif choice == "gpio":
             run_gpio_control()
+            
+        elif choice == "files":
+            run_file_manager()
+            
+        elif choice == "sudoku":
+            run_sudoku()
             
         elif choice == "app":
             run_app_selector()
