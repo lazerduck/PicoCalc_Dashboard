@@ -1,125 +1,166 @@
-# main.py — PicoCalc boot dashboard (patched: text fg only)
-import sys, time, gc
-import picocalc
+# battery.py - Battery monitoring for PicoCalc (Pico 2 with 2x 18650 parallel)
+# 
+# Hardware: 
+# - 2x 18650 Li-ion batteries in parallel (7600mAh total)
+# - VSYS ADC on Pico 2 (ADC pin 3)
+# - Voltage range: 3.0V - 4.2V per cell
+# - USB power detection: VSYS > 4.5V
 
-fb = picocalc.display  # framebuf-like screen
+from machine import ADC, Pin
+import time
 
-# -------- text helper (handles fg-only vs fg+bg builds) --------
-def draw_text(s, x, y, fg=7, bg=None):
-    try:
-        if bg is None:
-            fb.text(s, x, y, fg)
+class BatteryMonitor:
+    def __init__(self):
+        # VSYS is connected to ADC3 on Pico/Pico2
+        # VSYS has a voltage divider (typically 3:1)
+        self.vsys_adc = ADC(29)  # GPIO29 is ADC3 (VSYS)
+        
+        # Li-ion voltage thresholds (per cell)
+        self.VOLTAGE_MAX = 4.2  # Fully charged
+        self.VOLTAGE_MIN = 3.0  # Critically low
+        self.VOLTAGE_NOMINAL = 3.7  # Nominal voltage
+        
+        # USB detection threshold
+        self.USB_THRESHOLD = 4.5  # VSYS > 4.5V means USB connected
+        
+        # ADC reference voltage (3.3V) and conversion factor
+        self.ADC_VREF = 3.3
+        self.ADC_MAX = 65535  # 16-bit ADC
+        
+        # VSYS voltage divider ratio (typically 3:1 on Pico)
+        self.VSYS_DIVIDER = 3.0
+        
+    def read_vsys_voltage(self):
+        """Read VSYS voltage in volts"""
+        # Take multiple samples for stability
+        samples = []
+        for _ in range(10):
+            raw = self.vsys_adc.read_u16()
+            samples.append(raw)
+            time.sleep_ms(1)
+        
+        # Average the samples
+        avg_raw = sum(samples) // len(samples)
+        
+        # Convert to voltage
+        # voltage = (raw / ADC_MAX) * VREF * DIVIDER_RATIO
+        voltage = (avg_raw / self.ADC_MAX) * self.ADC_VREF * self.VSYS_DIVIDER
+        
+        return voltage
+    
+    def is_usb_powered(self, voltage=None):
+        """Check if device is USB powered"""
+        if voltage is None:
+            voltage = self.read_vsys_voltage()
+        return voltage > self.USB_THRESHOLD
+    
+    def voltage_to_percentage(self, voltage):
+        """
+        Convert battery voltage to percentage using a simplified Li-ion discharge curve
+        
+        Li-ion discharge curve (approximate):
+        4.2V = 100%
+        4.0V = 90%
+        3.9V = 80%
+        3.8V = 60%
+        3.7V = 40%
+        3.6V = 20%
+        3.4V = 10%
+        3.0V = 0%
+        """
+        # Voltage-to-percentage lookup table
+        voltage_curve = [
+            (4.20, 100),
+            (4.10, 95),
+            (4.00, 90),
+            (3.90, 80),
+            (3.80, 60),
+            (3.70, 40),
+            (3.60, 20),
+            (3.40, 10),
+            (3.20, 5),
+            (3.00, 0),
+        ]
+        
+        # If above max, return 100%
+        if voltage >= voltage_curve[0][0]:
+            return 100
+        
+        # If below min, return 0%
+        if voltage <= voltage_curve[-1][0]:
+            return 0
+        
+        # Linear interpolation between curve points
+        for i in range(len(voltage_curve) - 1):
+            v_high, p_high = voltage_curve[i]
+            v_low, p_low = voltage_curve[i + 1]
+            
+            if voltage >= v_low:
+                # Interpolate
+                ratio = (voltage - v_low) / (v_high - v_low)
+                percentage = p_low + ratio * (p_high - p_low)
+                return int(percentage)
+        
+        return 0
+    
+    def get_status(self):
+        """
+        Get complete battery status
+        
+        Returns dict with:
+        - voltage: Current VSYS voltage in volts
+        - voltage_mv: Current VSYS voltage in millivolts
+        - percentage: Battery charge percentage (0-100)
+        - usb_power: True if USB powered
+        - status: Text status ('Charging', 'Full', 'Discharging', 'Low', 'Critical')
+        """
+        voltage = self.read_vsys_voltage()
+        usb_power = self.is_usb_powered(voltage)
+        
+        # If USB powered, don't calculate percentage (voltage is higher)
+        if usb_power:
+            percentage = None
+            status = "USB Power"
         else:
-            fb.text(s, x, y, fg, bg)  # will work if your build supports bg
-    except TypeError:
-        # fallback to simplest form
-        fb.text(s, x, y)
+            percentage = self.voltage_to_percentage(voltage)
+            
+            # Determine status based on percentage
+            if percentage >= 90:
+                status = "Full"
+            elif percentage >= 20:
+                status = "Good"
+            elif percentage >= 10:
+                status = "Low"
+            else:
+                status = "Critical"
+        
+        return {
+            "voltage": round(voltage, 2),
+            "voltage_mv": int(voltage * 1000),
+            "percentage": percentage,
+            "usb_power": usb_power,
+            "status": status,
+        }
 
-# ---------------- UI helpers ----------------
-def clear():
-    fb.fill(0)
+# Global instance
+_monitor = None
 
-def title(t):
-    draw_text(t, 8, 8, 7)
+def get_monitor():
+    """Get or create the global battery monitor instance"""
+    global _monitor
+    if _monitor is None:
+        _monitor = BatteryMonitor()
+    return _monitor
 
-def line(y=22):
-    # if your port lacks hline, draw a 1-pixel tall fill_rect
-    try:
-        fb.hline(8, y, 300, 7)
-    except AttributeError:
-        fb.fill_rect(8, y, 300, 1, 7)
+def get_status():
+    """Convenience function to get battery status"""
+    return get_monitor().get_status()
 
-def center(text, y, color=7):
-    x = max(0, (300 - len(text)*8)//2)  # 300 px usable width; tweak if needed
-    draw_text(text, x, y, color)
+def get_percentage():
+    """Convenience function to get battery percentage"""
+    status = get_status()
+    return status.get("percentage")
 
-def wait_key(prompt="Press a key..."):
-    center(prompt, 200, 6)
-    ch = sys.stdin.read(1)
-    return ch
-
-def show_menu():
-    clear()
-    title("PicoCalc Dashboard")
-    line()
-    draw_text("1) Open REPL",        12, 36, 7)
-    draw_text("2) Memory stats",     12, 54, 7)
-    draw_text("3) Battery status",   12, 72, 7)
-    draw_text("q) Power off / reset",12, 90, 7)
-    draw_text("Choose:",             12, 116, 6)
-    return wait_key("1/2/3 or q")
-
-def show_mem():
-    clear()
-    title("Memory")
-    line()
-    free_b = gc.mem_free()
-    alloc_b = gc.mem_alloc()
-    total_b = free_b + alloc_b
-    draw_text(f"Total: {total_b} B", 12, 42, 7)
-    draw_text(f"Free : {free_b} B",  12, 60, 7)
-    draw_text(f"Alloc: {alloc_b} B", 12, 78, 7)
-    center("See REPL for details", 108, 6)
-    print("[mem] total:", total_b, "free:", free_b, "alloc:", alloc_b)
-    try:
-        import micropython
-        micropython.mem_info()
-    except Exception:
-        pass
-    wait_key("Press any key")
-
-def show_battery():
-    clear()
-    title("Battery")
-    line()
-    try:
-        import battery  # your /sd/battery.py (2P version)
-        s = battery.status(avg_draw_mA=180, ir_milliohm=120, capacity_mAh=7600)
-        mv = s.get("vsys_mV")
-        if s.get("usb_power"):
-            center("USB power detected", 54, 6)
-            draw_text(f"VSYS : {mv} mV", 12, 78, 7)
-            draw_text("(percent disabled on USB)", 12, 96, 7)
-        else:
-            pct = s.get("percent", 0)
-            hrs = s.get("hours_left")
-            draw_text(f"Voltage : {mv} mV", 12, 54, 7)
-            draw_text(f"Charge  : {pct} %", 12, 72, 7)
-            if hrs is not None:
-                draw_text(f"Est. hrs: {hrs}", 12, 90, 7)
-            # simple bar
-            x, y, w, h = 12, 110, 120, 12
-            try:
-                fb.rect(x, y, w, h, 7)
-            except Exception:
-                fb.fill_rect(x, y, w, 1, 7); fb.fill_rect(x, y+h-1, w, 1, 7)
-                fb.fill_rect(x, y, 1, h, 7); fb.fill_rect(x+w-1, y, 1, h, 7)
-            fillw = int((w-2) * max(0, min(100, pct)) / 100)
-            fb.fill_rect(x+1, y+1, fillw, h-2, 7)
-    except Exception as e:
-        center("Battery info N/A", 64, 6)
-        draw_text(str(e), 12, 90, 7)
-        draw_text("Ensure /sd/battery.py is present", 12, 108, 7)
-    wait_key("Press any key")
-
-# ---------------- main ----------------
-def main():
-    while True:
-        ch = show_menu()
-        if ch == "1":
-            clear(); center("Exiting to REPL...", 64, 7); time.sleep(0.3)
-            return
-        elif ch == "2":
-            show_mem()
-        elif ch == "3":
-            show_battery()
-        elif ch in ("q","Q"):
-            clear(); center("Resetting...", 64, 7); time.sleep(0.5)
-            try:
-                import machine
-                machine.reset()
-            except Exception:
-                sys.exit()
-        # ignore others and re-show menu
-
-main()
+def get_voltage():
+    """Convenience function to get battery voltage"""
+    return get_monitor().read_vsys_voltage()

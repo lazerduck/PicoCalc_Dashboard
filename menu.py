@@ -1,227 +1,400 @@
-# main.py — PicoCalc boot dashboard (patched: text fg only)
-import sys, time, gc
+# menu.py - Main Dashboard Menu for PicoCalc
+import sys
+import time
+import gc
 import picocalc
-from fileselect import select_file
+from ui import *
+from battery import get_status as get_battery_status
 
-fb = picocalc.display  # framebuf-like screen
-picocalc.terminal.wr("\x1b[?25l")  # hide cursor
+# Hide terminal cursor for clean UI
+picocalc.terminal.wr("\x1b[?25l")
 
-# -------- text helper (handles fg-only vs fg+bg builds) --------
-def draw_text(s, x, y, fg=7, bg=None):
-    try:
-        if bg is None:
-            fb.text(s, x, y, fg)
-        else:
-            fb.text(s, x, y, fg, bg)  # will work if your build supports bg
-    except TypeError:
-        # fallback to simplest form
-        fb.text(s, x, y)
+# ============ Menu Pages ============
 
-# ---------------- UI helpers ----------------
-def clear():
-    fb.fill(0)
-
-def title(t):
-    draw_text(t, 8, 8, 7)
-
-def line(y=22):
-    # if your port lacks hline, draw a 1-pixel tall fill_rect
-    try:
-        fb.hline(8, y, 300, 7)
-    except AttributeError:
-        fb.fill_rect(8, y, 300, 1, 7)
-
-def center(text, y, color=7):
-    x = max(0, (300 - len(text)*8)//2)  # 300 px usable width; tweak if needed
-    draw_text(text, x, y, color)
-
-def _battery_label():
-    try:
-        import battery
-        s = battery.status(avg_draw_mA=180, ir_milliohm=120, capacity_mAh=7600)
-        if s.get("usb_power"):
-            return "USB"
-        pct = s.get("percent")
-        if pct is None:
-            return "--%"
-        try:
-            pct = int(pct)
-        except Exception:
-            return "--%"
-        pct = max(0, min(100, pct))
-        return f"{pct}%"
-    except Exception:
-        return "--%"
-
-def draw_battery_top_right(color=6):
-    label = _battery_label()
-    # Right-align within 300 px width, with ~8 px margin
-    x = max(0, 300 - len(label)*8 - 8)
-    draw_text(label, x, 8, color)
-
-def wait_key_raw():
-    # Reads a single raw key from stdin (blocking)
-    # Returns: key code or character
-    import sys
-    ch = sys.stdin.read(1)
-    if ch == '\x1b':  # Escape sequence (arrow keys)
-        ch2 = sys.stdin.read(1)
-        if ch2 == '[':
-            ch3 = sys.stdin.read(1)
-            return ch3  # 'A'=up, 'B'=down, 'C'=right, 'D'=left
-        return ch2
-    return ch
-
-def show_menu():
+def show_main_menu(battery_status):
+    """
+    Display main menu and handle selection.
+    
+    Returns:
+        Selected option code (str) or None
+    """
     menu_items = [
-        ("Open REPL", "1"),
-        ("Memory stats", "2"),
-        ("Battery status", "3"),
-        ("Run App", "4"),
-        ("Edit file", "5"),
-        ("Play music", "6"),
-        ("Power off / reset", "q"),
+        ("Open REPL", "repl"),
+        ("Memory Stats", "memory"),
+        ("Battery Status", "battery"),
+        ("Run App", "app"),
+        ("Edit File", "edit"),
+        ("Play Music", "music"),
+        ("Power Off / Reset", "power"),
     ]
+    
     selected = 0
+    
     while True:
         clear()
-        title("PicoCalc Dashboard")
-        draw_battery_top_right()
-        line()
-        y0 = 36
+        
+        # Draw title bar with battery indicator
+        draw_title_bar("PicoCalc Dashboard", battery_status)
+        
+        # Draw menu items
+        y_start = 40
+        line_height = 20
+        
         for i, (label, _) in enumerate(menu_items):
-            color = 6 if i == selected else 7
-            prefix = "> " if i == selected else "  "
-            draw_text(prefix + label, 12, y0 + i*18, color)
-        draw_text("Use UP/DOWN, Enter to select", 12, 176, 6)
-        # Wait for key
-        k = wait_key_raw()
-        if k == 'A':  # up
+            y = y_start + i * line_height
+            draw_menu_item(label, 12, y, selected=(i == selected))
+        
+        # Draw help text at bottom
+        draw_text("UP/DOWN: Navigate | ENTER: Select", 12, 290, COLOR_YELLOW)
+        
+        # Wait for input
+        key = wait_key_raw()
+        
+        if key == 'A':  # Up
             selected = (selected - 1) % len(menu_items)
-        elif k == 'B':  # down
+        elif key == 'B':  # Down
             selected = (selected + 1) % len(menu_items)
-        elif k in ('\r', '\n'):  # Enter
+        elif key in ('\r', '\n'):  # Enter
             return menu_items[selected][1]
-        elif k in ('q', 'Q'):  # allow q to quit
-            return 'q'
+        elif key in ('q', 'Q'):  # Quick quit
+            return "power"
+        
+        # Update battery status for next iteration
+        try:
+            battery_status = get_battery_status()
+        except:
+            pass
 
-def show_mem():
+def show_memory_stats():
+    """Display memory statistics with visual representation."""
     clear()
-    title("Memory")
-    draw_battery_top_right()
-    line()
-    free_b = gc.mem_free()
-    alloc_b = gc.mem_alloc()
-    total_b = free_b + alloc_b
-    pct_free = int(100 * free_b / total_b) if total_b else 0
-    # Layout
-    draw_text(f"Total: {total_b} B", 12, 38, 7)
-    draw_text(f"Free : {free_b} B",  12, 56, 7)
-    draw_text(f"Alloc: {alloc_b} B", 12, 74, 7)
-    draw_text(f"Free: {pct_free}%", 180, 56, 6)
-    # Bar graph
-    x, y, w, h = 12, 98, 200, 16
+    
+    # Get battery status for title bar
     try:
-        fb.rect(x, y, w, h, 7)
-    except Exception:
-        fb.fill_rect(x, y, w, 1, 7); fb.fill_rect(x, y+h-1, w, 1, 7)
-        fb.fill_rect(x, y, 1, h, 7); fb.fill_rect(x+w-1, y, 1, h, 7)
-    free_w = int((w-2) * free_b / total_b) if total_b else 0
-    alloc_w = (w-2) - free_w
-    # Free memory bar (green-ish)
-    fb.fill_rect(x+1, y+1, free_w, h-2, 3)
-    # Allocated memory bar (red-ish)
-    fb.fill_rect(x+1+free_w, y+1, alloc_w, h-2, 2)
-    draw_text("Free", x+4, y+h+2, 3)
-    draw_text("Used", x+w-40, y+h+2, 2)
-    center("See REPL for details", 130, 6)
+        battery_status = get_battery_status()
+    except:
+        battery_status = None
+    
+    draw_title_bar("Memory Statistics", battery_status)
+    
+    # Get memory info
+    free_bytes = gc.mem_free()
+    alloc_bytes = gc.mem_alloc()
+    total_bytes = free_bytes + alloc_bytes
+    
+    if total_bytes > 0:
+        free_pct = int(100 * free_bytes / total_bytes)
+        alloc_pct = 100 - free_pct
+    else:
+        free_pct = alloc_pct = 0
+    
+    # Display text info
+    y = 50
+    draw_text(f"Total:     {total_bytes:>10} bytes", 20, y, COLOR_WHITE)
+    y += 20
+    draw_text(f"Free:      {free_bytes:>10} bytes", 20, y, COLOR_GREEN)
+    y += 20
+    draw_text(f"Allocated: {alloc_bytes:>10} bytes", 20, y, COLOR_RED)
+    y += 20
+    draw_text(f"Free:      {free_pct:>10}%", 20, y, COLOR_CYAN)
+    
+    # Draw visual bar
+    y += 30
+    bar_x = 20
+    bar_w = 280
+    bar_h = 30
+    
+    draw_rect(bar_x, y, bar_w, bar_h, COLOR_WHITE, fill=False)
+    
+    # Calculate bar widths
+    free_bar_w = int((bar_w - 2) * free_pct / 100)
+    alloc_bar_w = (bar_w - 2) - free_bar_w
+    
+    # Draw free memory (green)
+    if free_bar_w > 0:
+        fb.fill_rect(bar_x + 1, y + 1, free_bar_w, bar_h - 2, COLOR_GREEN)
+    
+    # Draw allocated memory (red)
+    if alloc_bar_w > 0:
+        fb.fill_rect(bar_x + 1 + free_bar_w, y + 1, alloc_bar_w, bar_h - 2, COLOR_RED)
+    
+    # Labels below bar
+    y += bar_h + 8
+    draw_text("Free", bar_x + 4, y, COLOR_GREEN)
+    draw_text("Used", bar_x + bar_w - 40, y, COLOR_RED)
+    
+    # Additional info
+    y += 30
+    center_text("Detailed info available in REPL:", y, COLOR_CYAN)
+    y += 16
+    center_text(">>> import gc", y, COLOR_WHITE)
+    y += 16
+    center_text(">>> gc.mem_free()", y, COLOR_WHITE)
+    
+    # Wait for key
+    draw_text("Press any key to return...", 12, 290, COLOR_YELLOW)
     wait_key_raw()
 
-def show_battery():
+def show_battery_details():
+    """Display detailed battery information."""
     clear()
-    title("Battery")
-    draw_battery_top_right()
-    line()
+    
+    # Get battery status
     try:
-        import battery  # your /sd/battery.py (2P version)
-        s = battery.status(avg_draw_mA=180, ir_milliohm=120, capacity_mAh=7600)
-        mv = s.get("vsys_mV")
-        if s.get("usb_power"):
-            center("USB power detected", 54, 6)
-            draw_text(f"VSYS : {mv} mV", 12, 78, 7)
-            draw_text("(percent disabled on USB)", 12, 96, 7)
-        else:
-            pct = s.get("percent", 0)
-            hrs = s.get("hours_left")
-            draw_text(f"Voltage : {mv} mV", 12, 54, 7)
-            draw_text(f"Charge  : {pct} %", 12, 72, 7)
-            if hrs is not None:
-                draw_text(f"Est. hrs: {hrs}", 12, 90, 7)
-            # simple bar
-            x, y, w, h = 12, 110, 120, 12
-            try:
-                fb.rect(x, y, w, h, 7)
-            except Exception:
-                fb.fill_rect(x, y, w, 1, 7); fb.fill_rect(x, y+h-1, w, 1, 7)
-                fb.fill_rect(x, y, 1, h, 7); fb.fill_rect(x+w-1, y, 1, h, 7)
-            fillw = int((w-2) * max(0, min(100, pct)) / 100)
-            fb.fill_rect(x+1, y+1, fillw, h-2, 7)
+        battery_status = get_battery_status()
     except Exception as e:
-        center("Battery info N/A", 64, 6)
-        draw_text(str(e), 12, 90, 7)
-        draw_text("Ensure /sd/battery.py is present", 12, 108, 7)
+        clear()
+        center_text("Battery Module Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+        return
+    
+    draw_title_bar("Battery Status", battery_status)
+    
+    # Display battery info
+    y = 50
+    voltage = battery_status.get("voltage", 0)
+    voltage_mv = battery_status.get("voltage_mv", 0)
+    percentage = battery_status.get("percentage")
+    usb_power = battery_status.get("usb_power", False)
+    status_text = battery_status.get("status", "Unknown")
+    
+    # Voltage
+    draw_text(f"Voltage:    {voltage:.2f} V  ({voltage_mv} mV)", 20, y, COLOR_WHITE)
+    y += 24
+    
+    # USB Power detection
+    if usb_power:
+        draw_text(f"Power:      USB Connected", 20, y, COLOR_CYAN)
+        y += 24
+        draw_text(f"Status:     Charging/Powered", 20, y, COLOR_CYAN)
+        y += 24
+        draw_text(f"Percentage: Not calculated (USB)", 20, y, COLOR_YELLOW)
+    else:
+        draw_text(f"Power:      Battery", 20, y, COLOR_WHITE)
+        y += 24
+        
+        # Status
+        if percentage is not None:
+            if percentage > 50:
+                status_color = COLOR_GREEN
+            elif percentage > 20:
+                status_color = COLOR_YELLOW
+            else:
+                status_color = COLOR_RED
+            
+            draw_text(f"Percentage: {int(percentage)}%", 20, y, status_color)
+            y += 24
+            draw_text(f"Status:     {status_text}", 20, y, status_color)
+        else:
+            draw_text(f"Percentage: Unknown", 20, y, COLOR_WHITE)
+            y += 24
+            draw_text(f"Status:     {status_text}", 20, y, COLOR_WHITE)
+    
+    # Draw large battery icon
+    if not usb_power and percentage is not None:
+        y += 30
+        
+        # Large progress bar showing battery level
+        bar_x = 40
+        bar_w = 240
+        bar_h = 40
+        
+        # Determine color
+        if percentage > 50:
+            bar_color = COLOR_GREEN
+        elif percentage > 20:
+            bar_color = COLOR_YELLOW
+        else:
+            bar_color = COLOR_RED
+        
+        draw_progress_bar(bar_x, y, bar_w, bar_h, percentage, bar_color)
+        
+        # Percentage text inside bar
+        pct_text = f"{int(percentage)}%"
+        text_x = 160 - len(pct_text) * 4  # Center in 320px screen
+        text_y = y + 16  # Center in bar
+        draw_text(pct_text, text_x, text_y, COLOR_WHITE)
+    
+    # Technical info at bottom
+    y = 240
+    draw_text("Battery: 2x 18650 Li-ion (7600mAh)", 20, y, COLOR_CYAN)
+    y += 16
+    draw_text("Range: 3.0V - 4.2V per cell", 20, y, COLOR_CYAN)
+    
+    # Wait for key
+    draw_text("Press any key to return...", 12, 290, COLOR_YELLOW)
     wait_key_raw()
 
-# ---------------- main ----------------
-def main():
+def run_app_selector():
+    """Launch app selector and runner."""
+    try:
+        from loadapp import run_app
+        run_app()
+        
+        # Show completion message
+        clear()
+        center_text("App Finished", 140, COLOR_GREEN)
+        center_text("Press any key to return...", 290, COLOR_YELLOW)
+        wait_key_raw()
+    except Exception as e:
+        clear()
+        center_text("App Loader Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
+def run_file_editor():
+    """Launch file selector and editor."""
+    try:
+        from fileselect import select_file
+        
+        # Select file to edit
+        path = select_file(
+            path="/sd",
+            exts=(".py", ".txt", ".json", ".csv", ".log"),
+            title="Select File to Edit",
+            return_full_path=True
+        )
+        
+        if not path:
+            return  # User cancelled
+        
+        # Show opening message
+        clear()
+        filename = path.split("/")[-1]
+        center_text(f"Opening {filename}...", 140, COLOR_YELLOW)
+        time.sleep(0.3)
+        
+        # Use built-in editor
+        edit(path)
+        
+        # Show completion message
+        clear()
+        center_text("Editor Closed", 140, COLOR_GREEN)
+        center_text("Press any key to return...", 290, COLOR_YELLOW)
+        wait_key_raw()
+        
+    except Exception as e:
+        clear()
+        center_text("Editor Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
+def run_music_player():
+    """Launch music file selector and player."""
+    try:
+        from play import play_music_file
+        play_music_file()
+    except Exception as e:
+        clear()
+        center_text("Music Player Error", 100, COLOR_RED)
+        center_text(str(e), 130, COLOR_WHITE)
+        center_text("Press any key...", 290, COLOR_YELLOW)
+        wait_key_raw()
+
+def show_power_menu():
+    """Show power options (reset/shutdown)."""
+    clear()
+    
+    draw_text("Power Options", 8, 8, COLOR_WHITE)
+    draw_line_horizontal(24, 0, 320, COLOR_WHITE)
+    
+    options = [
+        ("Reset Device", "reset"),
+        ("Cancel", "cancel"),
+    ]
+    
+    selected = 0
+    
     while True:
-        ch = show_menu()
-        if ch == "1":
-            picocalc.terminal.wr("\x1b[?25h") 
-            clear(); center("Exiting to REPL...", 64, 7); time.sleep(0.3)
-            return
-        elif ch == "2":
-            show_mem()
-        elif ch == "3":
-            show_battery()
-        elif ch == "4":
-            try:
-                import loadapp
-                loadapp.run_app(fb, draw_text, clear, center, wait_key_raw)
-                center("App finished. Press any key...", 120, 6)
-                wait_key_raw()
-            except Exception as e:
-                clear(); center("App loader error", 64, 2); center(str(e), 90, 2); time.sleep(1)
-        elif ch == "5":
-            try:
-                path = select_file(path="/sd", exts=(".py", ".txt", ".json", ".csv", ".log"), title="Select file to edit", return_full_path=True)
-                if not path:
-                    continue
-                # Prefer firmware-baked edit(), fallback to bundled nano
-                edit(path)
+        # Draw options
+        y_start = 80
+        line_height = 24
+        
+        for i in range(len(options)):
+            y = y_start + i * line_height
+            # Clear line first
+            fb.fill_rect(0, y, 320, line_height, COLOR_BLACK)
+        
+        for i, (label, _) in enumerate(options):
+            y = y_start + i * line_height
+            draw_menu_item(label, 12, y, selected=(i == selected))
+        
+        center_text("Warning: Unsaved data will be lost!", 160, COLOR_RED)
+        draw_text("UP/DOWN: Navigate | ENTER: Select", 12, 290, COLOR_YELLOW)
+        
+        # Wait for input
+        key = wait_key_raw()
+        
+        if key == 'A':  # Up
+            selected = (selected - 1) % len(options)
+        elif key == 'B':  # Down
+            selected = (selected + 1) % len(options)
+        elif key in ('\r', '\n'):  # Enter
+            return options[selected][1]
+        elif key in ('q', 'Q'):  # Quick cancel
+            return "cancel"
 
-                center("Editor closed. Press any key...", 120, 6)
-                wait_key_raw()
-            except Exception as e:
-                clear(); center("Editor error", 64, 2); center(str(e), 90, 2); time.sleep(1)
-        elif ch == "6":
-            try:
-                path = select_file(path="/sd", exts=(".mp3",), title="Select music file", return_full_path=True)
-                if not path:
-                    continue
-                import play
-                play.play_music(path)
-                center("Music playback finished. Press any key...", 120, 6)
-                wait_key_raw()
-            except Exception as e:
-                clear(); center("Editor error", 64, 2); center(str(e), 90, 2); time.sleep(1)
-        elif ch in ("q","Q"):
-            clear(); center("Resetting...", 64, 7); time.sleep(0.5)
-            try:
-                import machine
-                machine.reset()
-            except Exception:
-                sys.exit()
-        # ignore others and re-show menu
+# ============ Main Loop ============
 
-main()
+def main():
+    """Main dashboard loop."""
+    
+    # Get initial battery status
+    try:
+        battery_status = get_battery_status()
+    except:
+        battery_status = None
+    
+    while True:
+        # Show main menu and get selection
+        choice = show_main_menu(battery_status)
+        
+        if choice == "repl":
+            # Exit to REPL
+            picocalc.terminal.wr("\x1b[?25h")  # Show cursor
+            clear()
+            center_text("Exiting to REPL...", 140, COLOR_CYAN)
+            time.sleep(0.3)
+            return  # Exit to REPL
+            
+        elif choice == "memory":
+            show_memory_stats()
+            
+        elif choice == "battery":
+            show_battery_details()
+            
+        elif choice == "app":
+            run_app_selector()
+            
+        elif choice == "edit":
+            run_file_editor()
+            
+        elif choice == "music":
+            run_music_player()
+            
+        elif choice == "power":
+            power_choice = show_power_menu()
+            if power_choice == "reset":
+                clear()
+                center_text("Resetting Device...", 140, COLOR_RED)
+                time.sleep(0.5)
+                try:
+                    import machine
+                    machine.reset()
+                except:
+                    sys.exit()
+        
+        # Update battery status for next menu display
+        try:
+            battery_status = get_battery_status()
+        except:
+            pass
+
+# ============ Entry Point ============
+
+if __name__ == "__main__":
+    main()
